@@ -16,7 +16,6 @@ app.use(bodyParser.json());
 
 // Serve static files from the public directory
 app.use(express.static('public'));
-
 // Initialize database
 const connectionString = 'mongodb+srv://dumindu:glb802c@nodewf.rteno9s.mongodb.net/5315-project';
 db.initialize(connectionString);
