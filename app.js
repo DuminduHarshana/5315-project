@@ -4,22 +4,110 @@ const { engine } =require('express-handlebars');
 const bodyParser = require('body-parser');
 const { check, validationResult } = require('express-validator');
 const db = require('./models/db');
+require('dotenv').config();
+const { MongoClient } = require('mongodb');
 
 const app = express();
 
 app.engine('.hbs', engine({ extname:'.hbs' }));
 app.set('view engine', '.hbs');
-
+const connectionString = process.env.DB_CONNECTION_STRING;
+const jwt2=process.env.JWT_SECRET;
 // Set up body-parser middleware
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
 
 // Serve static files from the public directory
 app.use(express.static('public'));
-// Initialize database
-const connectionString = 'mongodb+srv://dumindu:glb802c@nodewf.rteno9s.mongodb.net/5315-project';
-db.initialize(connectionString);
 
+db.initialize(connectionString);
+const bcrypt = require('bcrypt');
+
+const jwt = require('jsonwebtoken');
+// Render registration form
+app.get('/register', (req, res) => {
+    res.render('register');
+});
+
+// Render login form
+app.get('/login', (req, res) => {
+    res.render('login');
+});
+
+
+const registerUser = async (req, res) => {
+    try {
+        const uri = connectionString;
+        const dbName = '5315-project';
+    if (!req.body.password || typeof req.body.password !== 'string') {
+        return res.status(400).send('Invalid password format.');
+    }
+    const client = new MongoClient(uri, { useNewUrlParser: true, useUnifiedTopology: true });
+    await client.connect();
+
+    // Select the database
+    const db2 = client.db(dbName);
+    // Generate salt and hash the password
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(req.body.password, salt);
+
+    // Create the user document
+    const newUser = {
+        username: req.body.username,
+        password: hashedPassword
+    };
+
+    // Insert the user document into the 'users' collection
+    await db2.collection('users').insertOne(newUser);
+
+    // Close the MongoDB connection
+    await client.close();
+
+    // Redirect to the login page after successful registration
+    res.status(201).redirect('/login');
+} catch (error) {
+    console.error(error);
+    res.status(500).send('Internal Server Error');
+}
+};
+
+// Async function to handle login
+const loginUser = async (req, res) => {
+    try{
+        const uri = connectionString;
+        const dbName = '5315-project';
+        const client = new MongoClient(uri, { useNewUrlParser: true, useUnifiedTopology: true });
+    await client.connect();
+
+    // Select the database
+    const db2 = client.db(dbName);
+    const user = await db2.collection('users').findOne({ username: req.body.username });
+
+        // Check if user exists
+        if (!user) {
+            return res.status(404).send('User not found.');
+        }
+
+        // Compare the provided password with the hashed password stored in the user document
+        const validPassword = await bcrypt.compare(req.body.password, user.password);
+
+        // Check if password is valid
+        if (!validPassword) {
+            return res.status(400).send('Invalid password.');
+            
+        
+        }
+        res.status(200).redirect('/');
+
+        // Close the MongoDB connection
+        await client.close();
+    } catch (error) {
+        console.error(error);
+        res.status(500).send('Internal Server Error');
+    }
+};
+app.post('/api/register', registerUser);
+app.post('/api/login', loginUser);
 // Validation middleware for GET /api/restaurants route
 const getRestaurantsValidator = [
     check('page').isInt().toInt(),
@@ -38,7 +126,7 @@ app.post('/api/restaurants', async (req, res) => {
 });
 
 // GET /api/restaurants
-app.get('/api/restaurants', getRestaurantsValidator, async (req, res) => {
+app.get('/api/restaurants',getRestaurantsValidator, async (req, res) => {
     try {
         const errors = validationResult(req);
         if (!errors.isEmpty()) {
